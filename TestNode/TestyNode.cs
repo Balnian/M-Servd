@@ -12,12 +12,20 @@ namespace TestNode
     {
         object IServerNode.Auth(object Data)
         {
-            throw new NotImplementedException();
+            return null;
         }
 
-        object IServerNode.ExecuteLogic(object PlayerData, object Data)
+        object IServerNode.ExecuteLogic(object PlayerData, object Data, object NodeSavedData)
         {
-            throw new NotImplementedException();
+            if(PlayerData!=null)
+            {
+                return 1;
+            }
+            else
+            {
+                Console.WriteLine("Error player failed to Authenticate");
+                return null;
+            }
         }
     }
 }

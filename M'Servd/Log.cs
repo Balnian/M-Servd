@@ -8,39 +8,63 @@ namespace M_Servd
 {
     class Log
     {
-        public static void Message(String str)
+        /// <summary>
+        /// Log a message
+        /// </summary>
+        /// <param name="message">Message that will be log</param>
+        public static void Message(String message)
         {
             ConsoleColor bkp = Console.ForegroundColor;
             Console.ForegroundColor = ConsoleColor.White;
-            Console.WriteLine(str);
+            Console.WriteLine(message);
             Console.ForegroundColor = bkp;
         }
-        public static void Success(String str)
+
+        /// <summary>
+        /// Log a success message
+        /// </summary>
+        /// <param name="message">Message that will be log</param>
+        public static void Success(String message)
         {
             ConsoleColor bkp = Console.ForegroundColor;
             Console.ForegroundColor = ConsoleColor.Green;
-            Console.WriteLine(str);
+            Console.WriteLine(message);
             Console.ForegroundColor = bkp;
         }
-        public static void Warning(String str)
+
+        /// <summary>
+        /// Log a warning message
+        /// </summary>
+        /// <param name="message">Message that will be log</param>
+        public static void Warning(String message)
         {
             ConsoleColor bkp = Console.ForegroundColor;
             Console.ForegroundColor = ConsoleColor.Yellow;
-            Console.WriteLine(str);
+            Console.WriteLine(message);
             Console.ForegroundColor = bkp;
         }
-        public static void Error(String str)
+
+        /// <summary>
+        /// Log an error message
+        /// </summary>
+        /// <param name="message">Message that will be log</param>
+        public static void Error(String message)
         {
             ConsoleColor bkp = Console.ForegroundColor;
             Console.ForegroundColor = ConsoleColor.Red;
-            Console.WriteLine(str);
+            Console.WriteLine(message);
             Console.ForegroundColor = bkp;
         }
-        public static void Debug(String str)
+
+        /// <summary>
+        /// Log a debug message
+        /// </summary>
+        /// <param name="str">Message that will be log</param>
+        public static void Debug(String message)
         {
             ConsoleColor bkp = Console.ForegroundColor;
             Console.ForegroundColor = ConsoleColor.Blue;
-            Console.WriteLine(str);
+            Console.WriteLine(message);
             Console.ForegroundColor = bkp;
         }
     }

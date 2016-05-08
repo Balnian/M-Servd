@@ -18,9 +18,22 @@ namespace M_Servd
     class Server
     {
         #region Singleton
+
+        /// <summary>
+        /// Only instance of the server
+        /// </summary>
         private static volatile Server m_instance;
+
+        /// <summary>
+        /// Object to lock the server instance creation 
+        /// (we cannot use this AKA m_instance see "Multithreaded Singleton" @ https://msdn.microsoft.com/en-us/library/ff650316.aspx)
+        /// </summary>
         private static object syncInstance = new object();
         private Server() { registerInternalCommands(); }
+
+        /// <summary>
+        /// Create and/or give the only instance of the server (is thread sage)
+        /// </summary>
         public static Server Instance
         {
             get
@@ -39,6 +52,9 @@ namespace M_Servd
         #endregion
 
         #region State
+        /// <summary>
+        /// Possible states of the server
+        /// </summary>
         public enum ServerState
         {
             Running,
@@ -47,20 +63,31 @@ namespace M_Servd
             Restarting
         }
 
+        /// <summary>
+        /// State of the server
+        /// </summary>
         public ServerState State { get; private set; } = ServerState.Halted;
         #endregion
 
         #region Start/Receive Connection
 
-        public static ManualResetEvent tcpClientConnected =
-    new ManualResetEvent(false);
+        /// <summary>
+        /// handle the async lock of the tcplistener
+        /// </summary>
+        public static ManualResetEvent tcpClientConnected = new ManualResetEvent(false);
 
+        /// <summary>
+        /// Run the server in an async mode
+        /// </summary>
+        /// <param name="stateInfo">might be useless (used for the threadpool?)</param>
         public void RunServerAsync(Object stateInfo)
         {
             if (State == ServerState.Halted)
             {
                 do
                 {
+                    if (State == ServerState.Restarting) Log.Success("Server Restarting...");
+
                     TcpListener Serverlistener = new TcpListener(IPAddress.Any, ServerListeningPort);
                     try
                     {
@@ -71,7 +98,10 @@ namespace M_Servd
                     }
                     catch (Exception e)
                     {
-                        Console.WriteLine(e.Message);
+                        State = ServerState.Stopping;
+                        Serverlistener?.Stop();
+                        Log.Error("Server failed to Start");
+                        Log.Error(e.Message);
                     }
 
                     while (State == ServerState.Running)
@@ -82,14 +112,19 @@ namespace M_Servd
                         tcpClientConnected.WaitOne(ServerReceiveTimeOut);
                         processCommands();
                     }
-                    Serverlistener.Stop();
-                    Log.Warning("Server Stopping");
+                    Serverlistener?.Stop();
+                    Log.Warning("Server Stopping...");
                 } while (State == ServerState.Restarting);
                 State = ServerState.Halted;
+                Log.Success("Server Stopped");
             }
 
         }
 
+        /// <summary>
+        /// Callback when a client connect to the server
+        /// </summary>
+        /// <param name="result"></param>
         private void handleClient(IAsyncResult result)
         {
             tcpClientConnected.Set();
@@ -106,10 +141,18 @@ namespace M_Servd
         #endregion
 
         #region Server Util
+
+        /// <summary>
+        /// Start the server
+        /// </summary>
         public void StartServer()
         {
             ThreadPool.QueueUserWorkItem(Server.Instance.RunServerAsync);
         }
+
+        /// <summary>
+        /// Halt the server
+        /// </summary>
         public void HaltServer()
         {
             if (State != ServerState.Halted || State != ServerState.Stopping)
@@ -118,6 +161,9 @@ namespace M_Servd
             }
         }
 
+        /// <summary>
+        /// Restart the server
+        /// </summary>
         public void RestartServer()
         {
             if (State == ServerState.Running)
@@ -147,6 +193,9 @@ namespace M_Servd
         /// </summary>
         public delegate void CommandItemCallback();
 
+        /// <summary>
+        /// Hold Data for a command
+        /// </summary>
         public class CommandItem
         {
             public String Description { get; set; }
@@ -162,6 +211,10 @@ namespace M_Servd
         Dictionary<String, CommandFactoryItem> m_commandFactory = new Dictionary<String, CommandFactoryItem>();
         Queue<CommandItem> m_commandQueue = new Queue<CommandItem>();
 
+        /// <summary>
+        /// Ask the server to execute a command
+        /// </summary>
+        /// <param name="commandStr">Command to execute</param>
         public void executeCommand(string commandStr)
         {
 
@@ -192,6 +245,9 @@ namespace M_Servd
                 processCommands();
         }
 
+        /// <summary>
+        /// Process (Execute) all commands currently in the queue
+        /// </summary>
         private void processCommands()
         {
             lock (m_commandQueue)
@@ -218,6 +274,9 @@ namespace M_Servd
             return wasSuccesful;
         }
 
+        /// <summary>
+        /// Register default server commands
+        /// </summary>
         private void registerInternalCommands()
         {
             registerCommand("Start", str =>
@@ -255,18 +314,6 @@ namespace M_Servd
                     }
                 };
             });
-
-            /*registerCommand("Restart", str =>
-            {
-                return new CommandItem
-                {
-                    Description = ""
-                    Executable = () =>
-                    {
-                        RestartServer();
-                    }
-                };
-            });*/
 
             registerCommand("Status", str =>
             {
@@ -370,26 +417,27 @@ namespace M_Servd
 
         #region ServerNode Management
 
+        /// <summary>
+        /// Contains all loaded server nodes
+        /// </summary>
         Dictionary<String, Type> m_nodes = new Dictionary<string, Type>();
-        void LoadServerNodeFromFile(String fileName)
-        {
-            fileName.Trim();
 
-            //if (!fileName.EndsWith(".dll"))
-            //{
-            //    fileName += ".dll";
-            //}
-            if (File.Exists(fileName))
+        /// <summary>
+        /// Try to load a node from a file
+        /// </summary>
+        /// <param name="path">Path of the file</param>
+        void LoadServerNodeFromFile(String path)
+        {
+            path.Trim();
+
+            if (File.Exists(path))
             {
                 try
                 {
-                    Assembly assembly = Assembly.LoadFrom(fileName);
-                    //assembly = Assembly.LoadFrom($"{fileName}.dll");
+                    Assembly assembly = Assembly.LoadFrom(path);
 
+                    Type[] Nodetypes = assembly.GetTypes();
 
-                    Type[] Nodetypes = assembly.GetTypes();//GetType("ServerNode");
-
-                    //object instanceOfMyType = Activator.CreateInstance(Nodetype);
                     foreach (var Nodetype in Nodetypes)
                     {
                         bool isValidNode = false;
@@ -402,28 +450,32 @@ namespace M_Servd
                                 NodeMeta meta = (NodeMeta)attr;
                                 lock (m_nodes)
                                 {
-                                    if (m_nodes.ContainsKey(meta.NodeFullID))
+                                    if (m_nodes.ContainsKey(meta.NodeUniqueID))
                                     {
-                                        NodeMeta oldMeta = Attribute.GetCustomAttributes(m_nodes[meta.NodeFullID]).FirstOrDefault(x => x is NodeMeta) as NodeMeta;
-                                        Log.Warning($"Loading nodes from {fileName} and NodeID \"{meta.NodeFullID}\" was already register from Project \"{oldMeta?.ProjectName}\" with node Name \"{oldMeta?.NodeName}\" and will be override");
+                                        NodeMeta oldMeta = Attribute.GetCustomAttributes(m_nodes[meta.NodeUniqueID]).FirstOrDefault(x => x is NodeMeta) as NodeMeta;
+                                        Log.Warning($"Loading nodes from {path} and NodeID \"{meta.NodeUniqueID}\" was already register from Project \"{oldMeta?.ProjectName}\" with node Name \"{oldMeta?.NodeName}\" and will be override");
                                     }
-                                    m_nodes[meta.NodeFullID] = Nodetype;
+                                    m_nodes[meta.NodeUniqueID] = Nodetype;
                                 }
                             }
                         }
                     }
                 }catch(Exception e)
                 {
-                    Log.Warning($"Failed to load Server Node from File : {fileName}");
+                    Log.Warning($"Failed to load Server Node from File : {path}");
                 }
             }
             else
             {
-                Log.Error($"File \"{fileName}\" doesn't exist");
+                Log.Error($"File \"{path}\" doesn't exist");
             }
 
         }
 
+        /// <summary>
+        /// Try to load nodes from all files of a directory
+        /// </summary>
+        /// <param name="path"></param>
         void LoadAllServerNodeFromDirectory(String path)
         {
             if(Directory.Exists(path))
