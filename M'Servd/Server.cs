@@ -1,8 +1,11 @@
-﻿using System;
+﻿using ServerNodeCore;
+using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
+using System.Reflection;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -299,12 +302,12 @@ namespace M_Servd
                          const int CommandWidth = 10;
                          const int DescriptionWidth = 60;
                          Console.WriteLine("");
-                         foreach (var item in m_commandFactory.OrderBy(x=>x.Key))
+                         foreach (var item in m_commandFactory.OrderBy(x => x.Key))
                          {
                              String Desc = item.Value("").Description;
 
                              Console.WriteLine($" {item.Key,-CommandWidth}{Desc.Substring(0, Math.Min(DescriptionWidth, Desc.Length)),-DescriptionWidth}");
-                             for (int i = 1; i < Math.Ceiling((double)Desc.Length/ DescriptionWidth); i++)
+                             for (int i = 1; i < Math.Ceiling((double)Desc.Length / DescriptionWidth); i++)
                              {
                                  Console.WriteLine($" {"",-CommandWidth}{Desc.Substring(i * DescriptionWidth, Math.Min(DescriptionWidth, Desc.Length - (i * DescriptionWidth))),-DescriptionWidth}");
                              }
@@ -315,12 +318,141 @@ namespace M_Servd
                  };
              });
 
+            registerCommand("LoadNode", str =>
+            {
+                return new CommandItem
+                {
+                    Description = "Load the node from the specified File or all files in the specified directory",
+                    Executable = () =>
+                    {
+                        if(Directory.Exists(str))
+                        {
+                            LoadAllServerNodeFromDirectory(str);
+                        }
+                        else if(File.Exists(str))
+                        {
+                            LoadServerNodeFromFile(str);
+                        }
+                        else
+                        {
+                            Log.Warning($"Target \"{str}\" doesn't exist");
+                        }
+                        foreach (var item in m_nodes)
+                        {
+                            Log.Debug(item.Key);
+                        }
+                    }
+                };
+            });
+
+            registerCommand("ListNodes", str =>
+            {
+                return new CommandItem
+                {
+                    Description = "List all currently loaded nodes",
+                    Executable = () =>
+                    {
+                        lock (m_nodes)
+                        {
+                            foreach (var item in m_nodes)
+                            {
+                                NodeMeta meta = Attribute.GetCustomAttributes(item.Value).FirstOrDefault(x => x is NodeMeta) as NodeMeta;
+
+                                Log.Debug($"({item.Key}) Node {meta.NodeName} From project {meta.ProjectName}");
+                            }
+                        }
+                    }
+                };
+            });
+
+        }
+        #endregion
+
+        #region ServerNode Management
+
+        Dictionary<String, Type> m_nodes = new Dictionary<string, Type>();
+        void LoadServerNodeFromFile(String fileName)
+        {
+            fileName.Trim();
+
+            //if (!fileName.EndsWith(".dll"))
+            //{
+            //    fileName += ".dll";
+            //}
+            if (File.Exists(fileName))
+            {
+                try
+                {
+                    Assembly assembly = Assembly.LoadFrom(fileName);
+                    //assembly = Assembly.LoadFrom($"{fileName}.dll");
+
+
+                    Type[] Nodetypes = assembly.GetTypes();//GetType("ServerNode");
+
+                    //object instanceOfMyType = Activator.CreateInstance(Nodetype);
+                    foreach (var Nodetype in Nodetypes)
+                    {
+                        bool isValidNode = false;
+                        System.Attribute[] attrs = System.Attribute.GetCustomAttributes(Nodetype);
+                        foreach (var attr in attrs)
+                        {
+                            if (attr is NodeMeta)
+                            {
+                                isValidNode = true;
+                                NodeMeta meta = (NodeMeta)attr;
+                                lock (m_nodes)
+                                {
+                                    if (m_nodes.ContainsKey(meta.NodeFullID))
+                                    {
+                                        NodeMeta oldMeta = Attribute.GetCustomAttributes(m_nodes[meta.NodeFullID]).FirstOrDefault(x => x is NodeMeta) as NodeMeta;
+                                        Log.Warning($"Loading nodes from {fileName} and NodeID \"{meta.NodeFullID}\" was already register from Project \"{oldMeta?.ProjectName}\" with node Name \"{oldMeta?.NodeName}\" and will be override");
+                                    }
+                                    m_nodes[meta.NodeFullID] = Nodetype;
+                                }
+                            }
+                        }
+                    }
+                }catch(Exception e)
+                {
+                    Log.Warning($"Failed to load Server Node from File : {fileName}");
+                }
+            }
+            else
+            {
+                Log.Error($"File \"{fileName}\" doesn't exist");
+            }
+
         }
 
-        void offlineCommandListener()
+        void LoadAllServerNodeFromDirectory(String path)
+        {
+            if(Directory.Exists(path))
+            {
+                String[] files = Directory.GetFiles(path);
+                if(files.Length > 0)
+                {
+                    foreach (String file in files)
+                    {
+                        LoadServerNodeFromFile(file);
+                    }
+                }
+                else
+                {
+                    Log.Warning($"Directory \"{path}\" is empty");
+                }
+            }
+            else
+            {
+                Log.Error($"Directory \"{path}\" doesn't exist");
+            }
+        }
+
+        bool CreateServerNode()
         {
 
+            return false;
         }
+
         #endregion
 
     }
